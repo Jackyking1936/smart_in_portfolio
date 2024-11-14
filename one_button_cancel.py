@@ -15,7 +15,6 @@ accounts = sdk.login(user_info_dict['id'], user_info_dict['pwd'], user_info_dict
 active_acc = accounts.data[0]
 print(active_acc)
 # %%
-
 order_results = sdk.stock.get_order_results(active_acc)
 # %%
 for order_res in order_results.data:
@@ -25,3 +24,4 @@ for order_res in order_results.data:
         if cancel_res.is_success:
             cancel_detail = cancel_res.data
             print(f"{cancel_detail.stock_no}, successfully canceled, market_type: {cancel_detail.market_type}, b4_qty: {cancel_detail.before_qty}, after_qty: {cancel_detail.after_qty}")
+# %%

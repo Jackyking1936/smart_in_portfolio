@@ -566,6 +566,16 @@ class MainApp(QWidget):
         return order_res
 
     def order_start(self):
+        lbt_text = self.lineEdit_last_buy_time.text()
+        lbt_time = None
+        try:
+            lbt_time = datetime.strptime(lbt_text, "%H:%M")
+        except Exception as e:
+            self.print_log(f"請輸入正確時間格式 %H:%S，如13:25, message: {e}")
+            return
+        now_time = datetime.now()
+        self.last_buy_time = now_time.replace(hour=lbt_time.hour, minute=lbt_time.minute, second=0, microsecond=0)
+
         order_start_log = '='*20
         order_start_log += '開始下單'
         order_start_log += '='*20
@@ -656,12 +666,13 @@ class MainApp(QWidget):
             self.communicator.print_log_signal('請輸入正確檔案路徑')
         else:
             try:
-                self.buy_target = pd.read_csv(buy_target_path)
+                self.buy_target = pd.read_csv(buy_target_path, encoding='utf-8', skiprows=3)
             except UnicodeDecodeError as e:
                 print("uff-8 fail, try cp950...", e)
                 self.buy_target = pd.read_csv(buy_target_path, encoding='cp950', skiprows=3)
             # print(self.buy_target)
-
+            self.buy_target = self.buy_target.iloc[:, :3]
+            self.buy_target = self.buy_target.dropna()
             self.new_pos_table.blockSignals(True)
 
             for i in range(self.buy_target.shape[0]):
@@ -934,34 +945,37 @@ class MainApp(QWidget):
 
     def after_time_emitter(self):
         now_time = datetime.now()
+        print(now_time, self.last_buy_time)
         if now_time>self.last_buy_time and self.can_buy_flag:
             self.communicator.after_time_signal.emit()
 
     def after_time_order(self):
-        for i in range(0, self.new_pos_table.rowCount()):
-            symbol = self.new_pos_table.item(i, self.new_table_col_idx_map['股票代號']).text()
-            buy_order_qty = self.new_pos_table.item(i, self.new_table_col_idx_map['委託數量']).text()
-            buy_order_price = self.new_pos_table.item(i, self.new_table_col_idx_map['委託價格']).text()
-            
-            buy_h_qty = int(int(buy_order_qty)//1000*1000)
-            buy_f_qty = int(buy_order_qty)%1000
-            if buy_h_qty > 0 and symbol not in self.is_buy_board_ordered:
-                buy_order_res = self.buy_limit_order(symbol, buy_order_price, str(buy_h_qty), self.buy_h_def)
-                if buy_order_res.is_success:
-                    self.communicator.print_log_signal.emit(f"{symbol}...等待時間到，買進整股委託成功, 委託價格: {buy_order_price}, 委託數量: {buy_h_qty}")
-                    self.is_buy_board_ordered[symbol] = buy_h_qty
-                else:
-                    self.communicator.print_log_signal.emit(symbol+' 買進整股委託失敗')
-                    self.communicator.print_log_signal.emit(buy_order_res.message)
+        now_time = datetime.now()
+        if now_time>self.last_buy_time:
+            for i in range(0, self.new_pos_table.rowCount()):
+                symbol = self.new_pos_table.item(i, self.new_table_col_idx_map['股票代號']).text()
+                buy_order_qty = self.new_pos_table.item(i, self.new_table_col_idx_map['委託數量']).text()
+                buy_order_price = self.new_pos_table.item(i, self.new_table_col_idx_map['委託價格']).text()
+                
+                buy_h_qty = int(int(buy_order_qty)//1000*1000)
+                buy_f_qty = int(buy_order_qty)%1000
+                if buy_h_qty > 0 and symbol not in self.is_buy_board_ordered:
+                    buy_order_res = self.buy_limit_order(symbol, buy_order_price, str(buy_h_qty), self.buy_h_def)
+                    if buy_order_res.is_success:
+                        self.communicator.print_log_signal.emit(f"{symbol}...等待時間到，買進整股委託成功, 委託價格: {buy_order_price}, 委託數量: {buy_h_qty}")
+                        self.is_buy_board_ordered[symbol] = buy_h_qty
+                    else:
+                        self.communicator.print_log_signal.emit(symbol+' 買進整股委託失敗')
+                        self.communicator.print_log_signal.emit(buy_order_res.message)
 
-            if buy_f_qty > 0 and symbol not in self.is_buy_odd_ordered:
-                buy_frac_order_res = self.buy_fraction_limit_order(symbol, buy_order_price, str(buy_f_qty), self.buy_f_def)
-                if buy_frac_order_res.is_success:
-                    self.communicator.print_log_signal.emit(f"{symbol}...等待時間到，買進零股委託成功, 委託價格: {buy_order_price}, 委託數量: {buy_f_qty}")
-                    self.is_buy_odd_ordered[symbol] = buy_f_qty
-                else:
-                    self.communicator.print_log_signal.emit(symbol+' 買進零股委託失敗')
-                    self.communicator.print_log_signal.emit(buy_frac_order_res.message)
+                if buy_f_qty > 0 and symbol not in self.is_buy_odd_ordered:
+                    buy_frac_order_res = self.buy_fraction_limit_order(symbol, buy_order_price, str(buy_f_qty), self.buy_f_def)
+                    if buy_frac_order_res.is_success:
+                        self.communicator.print_log_signal.emit(f"{symbol}...等待時間到，買進零股委託成功, 委託價格: {buy_order_price}, 委託數量: {buy_f_qty}")
+                        self.is_buy_odd_ordered[symbol] = buy_f_qty
+                    else:
+                        self.communicator.print_log_signal.emit(symbol+' 買進零股委託失敗')
+                        self.communicator.print_log_signal.emit(buy_frac_order_res.message)
 
     def buy_smart_orderer(self, tick_data):
         symbol = tick_data['symbol']
@@ -1012,7 +1026,7 @@ class MainApp(QWidget):
         msg = json.loads(message)
         event = msg["event"]
         data = msg["data"]
-        print(event, data)
+        # print(event, data)
         
         # subscribed事件處理
         if event == "subscribed":
