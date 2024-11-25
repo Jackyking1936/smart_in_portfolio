@@ -743,14 +743,6 @@ class MainApp(QWidget):
         open_time = now_time.replace(hour=9, minute=0, second=0, microsecond=0)
         close_time = now_time.replace(hour=13, minute=30, second=0, microsecond=0)
 
-        # if self.last_buy_time<=now_time:
-        #     self.print_log(f"請輸入正確的時間點，現在時間已超過 {self.last_buy_time}")
-        #     return
-
-        # if self.last_buy_time<open_time or self.last_buy_time>=close_time:
-        #     self.print_log(f"請輸入盤中的時間點，{self.last_buy_time} 已超出盤中時間")
-        #     return
-
         self.sell_trial_calculate()
         self.buy_trial_calculate()
         self.print_log(f"最後買進時間成功設定為: {self.last_buy_time}")
